@@ -58,16 +58,40 @@ class PlaylistViewServiceImpl(
         return CompletableFuture.completedFuture(false)
     }
 
-
     /**
      * playlist 정렬 함수.
      */
     override fun invoke(playlists: List<PlaylistBrief>, type: Type, at: LocalDateTime): List<PlaylistBrief> {
         return when (type) {
             Type.DEFAULT -> playlists // 기본 정렬
-            Type.VIEW -> TODO("전체 조회 수 정렬") // playlistEntity에 있는 viewCnt만 고려하면 됨
-            Type.HOT -> TODO("최근 1시간 조회 수 정렬") // playlistViews에서 최근 1시간만 고려해서 체크해야 함
+            Type.VIEW -> viewPlaylist(playlists)
+            Type.HOT -> hotPlaylist(playlists, at)
         }
+    }
+
+    // 전체 조회 수 정렬
+    // playlistEntity 에 있는 viewCnt 로 고려
+    private fun viewPlaylist(playlists:List<PlaylistBrief>):List<PlaylistBrief> {
+        val playlistViews = playlistRepository.findViewsByIds(playlists.map { it.id })
+        val viewMap = playlistViews.associate { it.id to it.viewCnt }
+        return playlists.sortedBy { viewMap[it.id] }.reversed()
+    }
+
+    // 최근 1시간 조회 수 정렬
+    // playlistViews 에서 최근 1시간만 고려해서 체크해야 함
+    private fun hotPlaylist(playlists:List<PlaylistBrief>, at:LocalDateTime):List<PlaylistBrief> {
+        val playlistViews = playlistViewRepository.findHotViewsByIds(at.minusHours(1), playlists.map { it.id })
+        val viewMap = playlistViews.associate { it.id to it.viewCnt }
+        return playlists.sortedBy { viewMap[it.id] }.reversed()
     }
 }
 
+data class PlaylistView(
+    val id:Long,
+    val viewCnt:Int
+)
+
+data class PlaylistHotView(
+    val id:Long,
+    val viewCnt:Long
+)
