@@ -1,6 +1,14 @@
 package com.wafflestudio.seminar.spring2023.customplaylist.service
 
+import com.wafflestudio.seminar.spring2023.customplaylist.repository.CustomPlaylistEntity
+import com.wafflestudio.seminar.spring2023.customplaylist.repository.CustomPlaylistRepository
+import com.wafflestudio.seminar.spring2023.customplaylist.repository.CustomPlaylistSongEntity
+import com.wafflestudio.seminar.spring2023.customplaylist.repository.CustomPlaylistSongRepository
+import com.wafflestudio.seminar.spring2023.song.repository.SongEntity
+import com.wafflestudio.seminar.spring2023.song.repository.SongRepository
+import com.wafflestudio.seminar.spring2023.song.service.Song
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 
 /**
  * 스펙:
@@ -13,25 +21,70 @@ import org.springframework.stereotype.Service
  *  3. JPA의 변경 감지 기능을 사용해야 한다.
  */
 @Service
-class CustomPlaylistServiceImpl : CustomPlaylistService {
+class CustomPlaylistServiceImpl(
+    private val customPlaylistRepository: CustomPlaylistRepository,
+    private val customPlaylistSongRepository: CustomPlaylistSongRepository,
+    private val songRepository: SongRepository,
+) : CustomPlaylistService {
 
     override fun get(userId: Long, customPlaylistId: Long): CustomPlaylist {
-        TODO("Not yet implemented")
+        val playlist = customPlaylistRepository.findByIdAndUserIdWithJoinFetch(id = customPlaylistId, userId = userId)?:throw CustomPlaylistNotFoundException()
+
+        val songs = songRepository.findAllByIdWithJoinFetch(ids = playlist.songs.map {it.song.id})
+
+        return customPlaylist(playlist, songs)
     }
 
     override fun gets(userId: Long): List<CustomPlaylistBrief> {
-        TODO("Not yet implemented")
+        val playlists = customPlaylistRepository.findAllByUserId(userId)
+        return playlists.map(::customPlaylistBrief)
     }
 
+    @Transactional
     override fun create(userId: Long): CustomPlaylistBrief {
-        TODO("Not yet implemented")
+        val count = customPlaylistRepository.countByUserId(userId)
+        val entity = CustomPlaylistEntity(userId = userId, title = "내 플레이리스트 #${count+1}")
+        customPlaylistRepository.save(entity)
+        return customPlaylistBrief(entity)
     }
 
+    /**
+     * title 바꾸기
+     */
+    @Transactional
     override fun patch(userId: Long, customPlaylistId: Long, title: String): CustomPlaylistBrief {
-        TODO("Not yet implemented")
+        val playlist =
+            customPlaylistRepository.findByIdAndUserId(id = customPlaylistId, userId = userId)
+                ?: throw CustomPlaylistNotFoundException()
+        playlist.title = title
+        return customPlaylistBrief(playlist)
     }
 
+    @Retry
+    @Transactional
     override fun addSong(userId: Long, customPlaylistId: Long, songId: Long): CustomPlaylistBrief {
-        TODO("Not yet implemented")
+        val playlist = customPlaylistRepository.findByIdAndUserId(id = customPlaylistId, userId = userId)
+            ?: throw CustomPlaylistNotFoundException()
+        val song = songRepository.findById(songId).orElseThrow { SongNotFoundException() }
+
+        customPlaylistSongRepository.save(CustomPlaylistSongEntity(
+            customPlaylist = playlist,
+            song = song
+        ))
+
+        playlist.songCnt = playlist.songCnt + 1
+        return customPlaylistBrief(playlist)
     }
+
 }
+fun customPlaylist(entity:CustomPlaylistEntity, songEntities:List<SongEntity>) = CustomPlaylist(
+    id = entity.id,
+    title = entity.title,
+    songs = songEntities.map(::Song)
+)
+
+fun customPlaylistBrief(entity:CustomPlaylistEntity) = CustomPlaylistBrief(
+    id = entity.id,
+    title = entity.title,
+    songCnt = entity.songCnt
+)

@@ -83,6 +83,7 @@ create table custom_playlists (
     user_id bigint not null,
     title varchar(255),
     song_cnt bigint default 0,
+    version bigint default 0,
     primary key (id)
 );
 create table custom_playlist_songs (
