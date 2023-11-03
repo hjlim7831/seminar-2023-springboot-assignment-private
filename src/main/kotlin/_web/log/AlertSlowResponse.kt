@@ -1,7 +1,13 @@
 package com.wafflestudio.seminar.spring2023._web.log
 
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.http.HttpEntity
+import org.springframework.http.HttpHeaders
+import org.springframework.http.MediaType
 import org.springframework.stereotype.Component
+import org.springframework.web.client.RestTemplate
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Future
 
 interface AlertSlowResponse {
@@ -27,10 +33,43 @@ data class SlowResponse(
  *  5. 슬랙 API의 성공 여부와 상관 없이, 우리 서버의 응답은 정상적으로 내려가야 한다.
  */
 @Component
-class AlertSlowResponseImpl : AlertSlowResponse {
+class AlertSlowResponseImpl(
+    @Value("\${slacktoken}")
+    private val token: String,
+    @Value("\${github}")
+    private val githubId: String,
+
+    ) : AlertSlowResponse {
     private val logger = LoggerFactory.getLogger(javaClass)
+    private val restTemplate = RestTemplate()
+
+    private val url = "https://slack.com/api/chat.postMessage"
 
     override operator fun invoke(slowResponse: SlowResponse): Future<Boolean> {
-        TODO()
+        val msg = "[API-RESPONSE] ${slowResponse.method} ${slowResponse.path}, took ${slowResponse.duration}ms, $githubId"
+
+        logger.warn(msg)
+
+        return CompletableFuture.supplyAsync {
+            var body = HashMap<String, String>()
+            body["text"] = msg
+            body["channel"] = "#spring-assignment-channel"
+
+            var headers = HttpHeaders()
+            headers.setBearerAuth(token)
+            headers.contentType = MediaType.APPLICATION_JSON
+
+            val request = HttpEntity(body, headers)
+
+            // 슬랙 채널에 RESPONSE 날리기
+            val postForEntity = restTemplate.postForEntity(
+                url, request, SlackResponse::class.java
+            )
+            postForEntity.body?.ok?:false
+        }
     }
 }
+
+data class SlackResponse(
+    val ok: Boolean
+)
