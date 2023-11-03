@@ -27,7 +27,7 @@ class RetryAspect {
         for (cnt in 1..maxRetry) {
             try {
                 return joinPoint.proceed()
-            } catch (e:Exception) {
+            } catch (e: ObjectOptimisticLockingFailureException) {
                 println("[retry] try count = $cnt/$maxRetry")
                 exceptionHolder = e
             }
